@@ -105,6 +105,32 @@ class ColorAdjuster(QMainWindow):
         max_w, max_h = 800, 600
         self.original.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
         self.updateImage()
+        self.loadData()
+        
+    def closeEvent(self, event):
+        print("закрыто")
+        dir = sys.argv[1]
+        ini = f"{dir}/desktop.ini"
+        icon = f"{dir}/icon.ico"
+        if os.path.exists(ini): subprocess.run(["attrib","+H",ini],check=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        if os.path.exists(icon): subprocess.run(["attrib","+H",icon],check=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        
+    def loadData(self):
+        ini = sys.argv[1]+"/desktop.ini"
+        if os.path.exists(ini): 
+            win32api.SetFileAttributes(ini, 0)
+            with open(ini, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith(";") or line.startswith("#") or line.startswith("["):
+                        continue
+                    if "=" in line:
+                        k, v = line.split("=", 1)
+                        if k.strip().lower() == "hue":
+                            self.hue_slider["slider"].setValue(int(v.strip()))
+                        if k.strip().lower() == "emoji":
+                            self.selected_emoji = chr(int(v.strip()))
+        self.updateImage()
 
     def createEmojiPopup(self):
         self.emoji_popup = QWidget(self, Qt.WindowType.Popup)
@@ -215,7 +241,9 @@ class ColorAdjuster(QMainWindow):
             if os.path.exists(ini): win32api.SetFileAttributes(ini, 0)
             if os.path.exists(icon): win32api.SetFileAttributes(icon, 0)
             with open(ini, "w", encoding="utf-8") as f:
-                f.write("[.ShellClassInfo]\nIconResource=.\\icon.ico,0\nIconFile=.\\icon.ico\nIconIndex=0")
+                s = f"[.ShellClassInfo]\nIconResource=.\\icon.ico,0\nIconFile=.\\icon.ico\nIconIndex=0\nhue={self.hue_slider['slider'].value()}"
+                if len(self.selected_emoji) > 0: s += f"\nemoji={ord(self.selected_emoji)}"
+                f.write(s)
                 subprocess.run(["attrib","+H",ini],check=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
             
             img = self.current_img.copy()
