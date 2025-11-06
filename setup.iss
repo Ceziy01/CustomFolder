@@ -19,8 +19,9 @@ Root: HKCR; Subkey: "Directory\shell\CustomFolder\command"; ValueType: string; V
 
 
 [Files]
-Source: "output/CustomFolder.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "output/CustomFolder/CustomFolder.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "./folder.png"; DestDir: "{app}"; Flags: ignoreversion
+Source: "output/CustomFolder/_internal\*"; DestDir: "{app}\internal"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [UninstallRun]
 Filename: "taskkill"; Parameters: "/f /im CustomFolder.exe /t"; Flags: runhidden waituntilterminated

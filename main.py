@@ -2,22 +2,29 @@ from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QVBoxLayout, QWid
 from PyQt6.QtCore import Qt, QBuffer, QIODevice, QRect, QPoint
 from PyQt6.QtGui import QPixmap, QPainter, QFont, QColor
 from PIL import Image, ImageEnhance
-import numpy as np
 import colorsys, io, os, ctypes, sys, subprocess, win32api
 
-def shiftHueNP(image, shift):
+def shiftHue(image, shift):
     image = image.convert('RGBA')
-    arr = np.array(image).astype('float32') / 255.0
-    rgb = arr[..., :3]
-    alpha = arr[..., 3:]
-    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
-    h, s, v = np.vectorize(colorsys.rgb_to_hsv)(r, g, b)
-    h = (h + shift) % 1.0
-    r, g, b = np.vectorize(colorsys.hsv_to_rgb)(h, s, v)
-    new_rgb = np.stack([r, g, b], axis=-1)
-    new_arr = np.concatenate([new_rgb, alpha], axis=-1)
-    new_arr = (new_arr * 255).astype('uint8')
-    return Image.fromarray(new_arr, mode='RGBA')
+    width, height = image.size
+    pixels = list(image.getdata())
+    
+    new_pixels = []
+    for r, g, b, a in pixels:
+        r_f, g_f, b_f = r / 255.0, g / 255.0, b / 255.0
+        h, s, v = colorsys.rgb_to_hsv(r_f, g_f, b_f)
+        h = (h + shift) % 1.0
+        r_new, g_new, b_new = colorsys.hsv_to_rgb(h, s, v)
+        new_pixels.append((
+            int(r_new * 255),
+            int(g_new * 255),
+            int(b_new * 255),
+            a
+        ))
+
+    new_image = Image.new('RGBA', (width, height))
+    new_image.putdata(new_pixels)
+    return new_image
 
 def emojiToPil(emoji, size=100):
     extra = size // 2
@@ -56,6 +63,9 @@ else:
 class ColorAdjuster(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.dir_path = sys.argv[1]
+        self.ini_path = f"{self.dir_path}/desktop.ini"
+        self.icon_path = f"{self.dir_path}/icon.ico"
         self.setWindowTitle("Custom folder")
         self.resize(400, 200)
         self.original = None
@@ -63,7 +73,7 @@ class ColorAdjuster(QMainWindow):
         self.selected_emoji = ""
 
         self.image_label = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
-        self.image_label.setFixedSize(100, 100)
+        self.image_label.setFixedSize(90, 90)
         self.img_div = QVBoxLayout()
         self.img_div.setContentsMargins(50, 50, 50, 50)
         self.img_div.addWidget(self.image_label)
@@ -79,19 +89,26 @@ class ColorAdjuster(QMainWindow):
 
         self.emoji_button = QPushButton("Выбрать эмодзи")
         self.emoji_button.clicked.connect(self.toggleEmojiPopup)
+        
+        self.reset_icon_button = QPushButton("Сбросить иконку")
+        self.reset_icon_button.clicked.connect(self.resetIcon)
+        
+        self.hv_btns = QHBoxLayout()
+        self.hv_btns.addWidget(self.reset_button)
+        self.hv_btns.addWidget(self.emoji_button)
 
         self.createEmojiPopup()
 
         sliders_layout = QVBoxLayout()
-        sliders_layout.addWidget(self.reset_button)
+        sliders_layout.addLayout(self.hv_btns)
         sliders_layout.addWidget(self.save_button)
-        sliders_layout.addWidget(self.emoji_button)
         sliders_layout.addWidget(self.hue_slider['label'])
         sliders_layout.addWidget(self.hue_slider['slider'])
         sliders_layout.addWidget(self.sat_slider['label'])
         sliders_layout.addWidget(self.sat_slider['slider'])
         sliders_layout.addWidget(self.bri_slider['label'])
         sliders_layout.addWidget(self.bri_slider['slider'])
+        sliders_layout.addWidget(self.reset_icon_button)
         sliders_layout.addStretch()
 
         main_layout = QHBoxLayout()
@@ -106,20 +123,29 @@ class ColorAdjuster(QMainWindow):
         self.original.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
         self.updateImage()
         self.loadData()
+        self.emoji_popup.move(QPoint(0, 5000))
+        self.emoji_popup.show()
+        self.emoji_popup.hide()
+        
+    def resetIcon(self):
+        if self.dir_path:
+            self.resetSliders()
+            if os.path.exists(self.ini_path): 
+                win32api.SetFileAttributes(self.ini_path, 0)
+                os.remove(self.ini_path)
+            if os.path.exists(self.icon_path): 
+                win32api.SetFileAttributes(self.icon_path, 0)
+                os.remove(self.icon_path)
+            ctypes.windll.shell32.SHChangeNotify(0x8000000, 0x1000, None, None)
         
     def closeEvent(self, event):
-        print("закрыто")
-        dir = sys.argv[1]
-        ini = f"{dir}/desktop.ini"
-        icon = f"{dir}/icon.ico"
-        if os.path.exists(ini): subprocess.run(["attrib","+H",ini],check=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
-        if os.path.exists(icon): subprocess.run(["attrib","+H",icon],check=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        if os.path.exists(self.ini_path): subprocess.run(["attrib","+H",self.ini_path],check=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        if os.path.exists(self.icon_path): subprocess.run(["attrib","+H",self.icon_path],check=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
         
     def loadData(self):
-        ini = sys.argv[1]+"/desktop.ini"
-        if os.path.exists(ini): 
-            win32api.SetFileAttributes(ini, 0)
-            with open(ini, "r", encoding="utf-8") as f:
+        if os.path.exists(self.ini_path): 
+            win32api.SetFileAttributes(self.ini_path, 0)
+            with open(self.ini_path, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if not line or line.startswith(";") or line.startswith("#") or line.startswith("["):
@@ -128,6 +154,10 @@ class ColorAdjuster(QMainWindow):
                         k, v = line.split("=", 1)
                         if k.strip().lower() == "hue":
                             self.hue_slider["slider"].setValue(int(v.strip()))
+                        if k.strip().lower() == "sat":
+                            self.sat_slider["slider"].setValue(int(v.strip()))
+                        if k.strip().lower() == "bri":
+                            self.bri_slider["slider"].setValue(int(v.strip()))
                         if k.strip().lower() == "emoji":
                             self.selected_emoji = chr(int(v.strip()))
         self.updateImage()
@@ -215,11 +245,11 @@ class ColorAdjuster(QMainWindow):
         sat_factor = self.sat_slider['slider'].value()/100.0
         bri_factor = self.bri_slider['slider'].value()/100.0
         if abs(hue_shift) > 0.001:
-            img = shiftHueNP(img, hue_shift)
+            img = shiftHue(img, hue_shift)
         img = ImageEnhance.Color(img).enhance(sat_factor)
         img = ImageEnhance.Brightness(img).enhance(bri_factor)
         if self.selected_emoji:
-            img = addEmojiCenter(img, self.selected_emoji, size_ratio=0.2)
+            img = addEmojiCenter(img, self.selected_emoji, size_ratio=0.3)
         self.current_img = img
         buf = io.BytesIO()
         img.save(buf, format="PNG")
@@ -234,22 +264,19 @@ class ColorAdjuster(QMainWindow):
 
     def setIcon(self):
         if self.current_img is None: return
-        dir = sys.argv[1]
-        ini = f"{dir}/desktop.ini"
-        icon = f"{dir}/icon.ico"
-        if dir:
-            if os.path.exists(ini): win32api.SetFileAttributes(ini, 0)
-            if os.path.exists(icon): win32api.SetFileAttributes(icon, 0)
-            with open(ini, "w", encoding="utf-8") as f:
-                s = f"[.ShellClassInfo]\nIconResource=.\\icon.ico,0\nIconFile=.\\icon.ico\nIconIndex=0\nhue={self.hue_slider['slider'].value()}"
+        if self.dir_path:
+            if os.path.exists(self.ini_path): win32api.SetFileAttributes(self.ini_path, 0)
+            if os.path.exists(self.icon_path): win32api.SetFileAttributes(self.icon_path, 0)
+            with open(self.ini_path, "w", encoding="utf-8") as f:
+                s = f"[.ShellClassInfo]\nIconResource=.\\icon.ico,0\nIconFile=.\\icon.ico\nIconIndex=0\nhue={self.hue_slider['slider'].value()}\nsat={self.sat_slider['slider'].value()}\nbri={self.bri_slider['slider'].value()}"
                 if len(self.selected_emoji) > 0: s += f"\nemoji={ord(self.selected_emoji)}"
                 f.write(s)
-                subprocess.run(["attrib","+H",ini],check=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                subprocess.run(["attrib","+H",self.ini_path],check=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
             
             img = self.current_img.copy()
             img = img.resize((256, 256), Image.Resampling.LANCZOS)
-            img.save(icon, format="ICO")
-            subprocess.run(["attrib","+H",icon],check=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            img.save(self.icon_path, format="ICO")
+            subprocess.run(["attrib","+H",self.icon_path],check=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
             ctypes.windll.shell32.SHChangeNotify(0x8000000, 0x1000, None, None)
 
 if __name__ == "__main__":
