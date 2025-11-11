@@ -68,64 +68,8 @@ class ColorAdjuster(QMainWindow):
         self.icon_path = f"{self.dir_path}/icon.ico"
         self.setWindowTitle("Custom folder")
         self.resize(400, 200)
-        self.original = None
-        self.current_img = None
-        self.selected_emoji = ""
-
-        self.image_label = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
-        self.image_label.setFixedSize(90, 90)
-        self.img_div = QVBoxLayout()
-        self.img_div.setContentsMargins(50, 50, 50, 50)
-        self.img_div.addWidget(self.image_label)
-
-        self.hue_slider = self.makeSlider(-50, 50, 0, "Hue")
-        self.sat_slider = self.makeSlider(0, 200, 100, "Saturation")
-        self.bri_slider = self.makeSlider(0, 200, 100, "Brightness")
-
-        self.reset_button = QPushButton("Сбросить")
-        self.reset_button.clicked.connect(self.resetSliders)
-        self.save_button = QPushButton("Установить как иконку")
-        self.save_button.clicked.connect(self.setIcon)
-
-        self.emoji_button = QPushButton("Выбрать эмодзи")
-        self.emoji_button.clicked.connect(self.toggleEmojiPopup)
         
-        self.reset_icon_button = QPushButton("Сбросить иконку")
-        self.reset_icon_button.clicked.connect(self.resetIcon)
         
-        self.hv_btns = QHBoxLayout()
-        self.hv_btns.addWidget(self.reset_button)
-        self.hv_btns.addWidget(self.emoji_button)
-
-        self.createEmojiPopup()
-
-        sliders_layout = QVBoxLayout()
-        sliders_layout.addLayout(self.hv_btns)
-        sliders_layout.addWidget(self.save_button)
-        sliders_layout.addWidget(self.hue_slider['label'])
-        sliders_layout.addWidget(self.hue_slider['slider'])
-        sliders_layout.addWidget(self.sat_slider['label'])
-        sliders_layout.addWidget(self.sat_slider['slider'])
-        sliders_layout.addWidget(self.bri_slider['label'])
-        sliders_layout.addWidget(self.bri_slider['slider'])
-        sliders_layout.addWidget(self.reset_icon_button)
-        sliders_layout.addStretch()
-
-        main_layout = QHBoxLayout()
-        main_layout.addLayout(self.img_div, stretch=3)
-        main_layout.addLayout(sliders_layout, stretch=1)
-        container_main = QWidget()
-        container_main.setLayout(main_layout)
-        self.setCentralWidget(container_main)
-
-        self.original = Image.open(os.path.join(exe_dir, "folder.png")).convert("RGBA")
-        max_w, max_h = 800, 600
-        self.original.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
-        self.updateImage()
-        self.loadData()
-        self.emoji_popup.move(QPoint(0, 5000))
-        self.emoji_popup.show()
-        self.emoji_popup.hide()
         
     def resetIcon(self):
         if self.dir_path:
@@ -268,7 +212,7 @@ class ColorAdjuster(QMainWindow):
             if os.path.exists(self.ini_path): win32api.SetFileAttributes(self.ini_path, 0)
             if os.path.exists(self.icon_path): win32api.SetFileAttributes(self.icon_path, 0)
             with open(self.ini_path, "w", encoding="utf-8") as f:
-                s = f"[.ShellClassInfo]\nIconResource=.\\icon.ico,0\nIconFile=.\\icon.ico\nIconIndex=0\nhue={self.hue_slider['slider'].value()}\nsat={self.sat_slider['slider'].value()}\nbri={self.bri_slider['slider'].value()}"
+                
                 if len(self.selected_emoji) > 0: s += f"\nemoji={ord(self.selected_emoji)}"
                 f.write(s)
                 subprocess.run(["attrib","+H",self.ini_path],check=True, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
